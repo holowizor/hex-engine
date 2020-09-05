@@ -1,29 +1,29 @@
 package hex.engine
 
-import com.badlogic.gdx.ApplicationAdapter
+import com.badlogic.gdx.Game
 import com.badlogic.gdx.Gdx
-import com.badlogic.gdx.graphics.GL20
-import com.badlogic.gdx.graphics.Texture
-import com.badlogic.gdx.graphics.g2d.SpriteBatch
+import com.badlogic.gdx.InputMultiplexer
 
-class HexPreviewGame : ApplicationAdapter() {
-    var batch: SpriteBatch? = null
-    var img: Texture? = null
+object HexPreviewGame : Game() {
+
+    // BAD DESIGN
+    private var worldScreen: WorldScreen? = null
+
     override fun create() {
-        batch = SpriteBatch()
-        img = Texture("badlogic.jpg")
+        Gdx.input.inputProcessor = InputMultiplexer()
+
+        // BAD DESIGN
+        worldScreen = WorldScreen("hex-sample.json")
+
+        world()
     }
 
-    override fun render() {
-        Gdx.gl.glClearColor(1f, 0f, 0f, 1f)
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-        batch!!.begin()
-        batch!!.draw(img, 0f, 0f)
-        batch!!.end()
+    fun world() {
+        screen = HexPreviewGame.worldScreen
+        screen.show()
     }
 
     override fun dispose() {
-        batch!!.dispose()
-        img!!.dispose()
+        screen.dispose()
     }
 }

@@ -8,6 +8,7 @@ object DesktopLauncher {
     @JvmStatic
     fun main(arg: Array<String>) {
         val config = LwjglApplicationConfiguration()
-        LwjglApplication(HexPreviewGame(), config)
+        config.resizable = false
+        LwjglApplication(HexPreviewGame, config)
     }
 }

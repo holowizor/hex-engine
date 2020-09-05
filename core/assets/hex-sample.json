@@ -40,7 +40,7 @@
  "staggeraxis":"x",
  "staggerindex":"odd",
  "tiledversion":"1.4.1",
- "tileheight":32,
+ "tileheight":30,
  "tilesets":[
         {
          "firstgid":1,
