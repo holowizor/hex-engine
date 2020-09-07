@@ -9,10 +9,6 @@ import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.math.Vector3
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Stage
-import hex.engine.map.LevelMap
-import hex.engine.map.MapReader
-import hex.engine.map.PixI
-
 
 open class BaseScreen : Screen, InputProcessor {
     val mainStage = Stage()
@@ -99,7 +95,9 @@ open class BaseScreen : Screen, InputProcessor {
 class WorldScreen(worldMapAsset: String) : BaseScreen() {
 
     val levelMap: LevelMap
-    val highlight: WhitePx
+    val highlight: Highlight
+    val unitHighlight: UnitHighlight
+    val units = ArrayList<Unit>()
 
     var lmbPressed: Vector2? = null
     var rmbPressed: Vector2? = null
@@ -107,12 +105,26 @@ class WorldScreen(worldMapAsset: String) : BaseScreen() {
     init {
         levelMap = MapReader.readMap(worldMapAsset)
         levelMap.terrain.forEach { oddQ, hex -> TileActor(hex.tile.texture, hex.pixF.x, hex.pixF.y, hex.tile.textureWidth.toFloat(), hex.tile.textureHeight.toFloat(), this.mainStage) }
-        highlight = WhitePx(mainStage)
+        highlight = Highlight(mainStage)
+        unitHighlight = UnitHighlight(mainStage)
+        units.add(Unit(this.levelMap, OddQ(1, 1), mainStage))
     }
 
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
         if (button == Buttons.LEFT) {
             lmbPressed = Vector2(screenX.toFloat(), screenY.toFloat())
+            val worldPx = screenToPixI(screenX, screenY)
+            levelMap.worldToHex[worldPx]?.let { hex ->
+                // get unit
+                val unit = units.firstOrNull { it.oddQ == hex.oddQ }
+                if (unit != null) {
+                    unitHighlight.x = levelMap.oddQToPixF[unit.oddQ]!!.x
+                    unitHighlight.y = levelMap.oddQToPixF[unit.oddQ]!!.y
+                    unitHighlight.isVisible = true
+                } else {
+                    unitHighlight.isVisible = false
+                }
+            }
         }
         if (button == Buttons.RIGHT) {
             rmbPressed = Vector2(screenX.toFloat(), screenY.toFloat())
@@ -141,14 +153,12 @@ class WorldScreen(worldMapAsset: String) : BaseScreen() {
     }
 
     override fun mouseMoved(screenX: Int, screenY: Int): Boolean {
-        val vec = Vector3(screenX.toFloat(), screenY.toFloat(), 0f)
-        this.mainStage.camera.unproject(vec)
-
-        val worldPx = PixI(vec.x.toInt(), vec.y.toInt())
+        this.highlight.isVisible = false
+        val worldPx = screenToPixI(screenX, screenY)
         levelMap.worldToHex[worldPx]?.let {
-            // hex
-            highlight.x = it.pixF.x + (levelMap.tileWidth.toFloat() / 2f)
-            highlight.y = it.pixF.y + (levelMap.tileHeight.toFloat() / 2f)
+            highlight.x = it.pixF.x
+            highlight.y = it.pixF.y
+            this.highlight.isVisible = true
         }
 
         return super.mouseMoved(screenX, screenY)
@@ -161,47 +171,65 @@ class WorldScreen(worldMapAsset: String) : BaseScreen() {
 
         return super.keyDown(keycode)
     }
+
+    fun screenToPixI(screenX: Int, screenY: Int): PixI {
+        val vec = this.mainStage.camera.unproject(Vector3(screenX.toFloat(), screenY.toFloat(), 0f))
+        return PixI(vec.x.toInt(), vec.y.toInt())
+    }
 }
 
+abstract class BaseActor(val texture: TextureRegion, s: Stage) : Actor() {
+    init {
+        this.x = 0f
+        this.y = 0f
+        s.addActor(this)
+    }
 
-class TileActor : Actor {
+    override fun draw(batch: Batch, parentAlpha: Float) {
+        batch.draw(texture,
+                x, y, originX, originY,
+                width, height, scaleX, scaleY, rotation);
+        super.draw(batch, parentAlpha)
+    }
+}
 
-    constructor(texture: TextureRegion, x: Float, y: Float, width: Float, height: Float, s: Stage) {
+class TileActor(texture: TextureRegion, x: Float, y: Float, width: Float, height: Float, s: Stage) : BaseActor(texture, s) {
+    init {
         this.x = x
         this.y = y
         this.width = width
         this.height = height
-        this.texture = texture
-        s.addActor(this)
-    }
-
-    var texture: TextureRegion
-
-    override fun draw(batch: Batch, parentAlpha: Float) {
-        batch.draw(texture,
-                x, y, originX, originY,
-                width, height, scaleX, scaleY, rotation);
-        super.draw(batch, parentAlpha)
     }
 }
 
-class WhitePx(s: Stage) : Actor() {
-    val texture: TextureRegion
+class Highlight(s: Stage) : BaseActor(TextureHelper.loadTexture("highlight.png"), s) {
+    init {
+        width = 32f
+        height = 30f
+        isVisible = false
+    }
+}
+
+class UnitHighlight(s: Stage) : BaseActor(TextureHelper.loadTexture("unit-highlight.png"), s) {
+    init {
+        width = 32f
+        height = 30f
+        isVisible = false
+    }
+}
+
+class Unit(val map: LevelMap, position: OddQ, s: Stage) : BaseActor(TextureHelper.loadTexture("unit.png"), s) {
+    var oddQ: OddQ = position
+        set(newPosition) {
+            field = newPosition
+            x = map.oddQToPixF[newPosition]!!.x
+            y = map.oddQToPixF[newPosition]!!.y
+        }
 
     init {
-        this.x = 0f
-        this.y = 0f
-        texture = TextureHelper.loadTexture("white-px.png")
-        width = 1f
-        height = 1f
-        s.addActor(this)
-    }
-
-    override fun draw(batch: Batch, parentAlpha: Float) {
-        batch.draw(texture,
-                x, y, originX, originY,
-                width, height, scaleX, scaleY, rotation);
-        super.draw(batch, parentAlpha)
+        width = 32f
+        height = 30f
+        x = map.oddQToPixF[position]!!.x
+        y = map.oddQToPixF[position]!!.y
     }
 }
-

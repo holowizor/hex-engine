@@ -1,4 +1,4 @@
-package hex.engine.map
+package hex.engine
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Texture
@@ -47,6 +47,7 @@ class LevelMap(val tileWidth: Int = 32,
 
     val terrain = HashMap<OddQ, Hex>()
     val worldToHex = HashMap<PixI, Hex>()
+    val oddQToPixF = HashMap<OddQ, PixF>()
 
     init {
         val gidTileMap = HashMap<Int, Tile>()
@@ -61,8 +62,9 @@ class LevelMap(val tileWidth: Int = 32,
                 val oddQ = OddQ(idx % it.width, idx / it.width)
                 val odd = oddQ.col % 2 == 0
                 val pix = PixF((oddQ.col * (tileWidth - hexSideLength / 2)).toFloat(), -(oddQ.row * tileHeight + if (!odd) tileHeight / 2 else 0).toFloat())
+                oddQToPixF[oddQ] = pix
                 gidTileMap[gid]?.let { tile ->
-                    val hex = Hex(pix, tile)
+                    val hex = Hex(oddQ, pix, tile)
                     terrain[oddQ] = hex
 
                     // mapping world coordinates to hex
@@ -76,8 +78,8 @@ class LevelMap(val tileWidth: Int = 32,
 }
 
 data class OddQ(val col: Int, val row: Int) {
-    val cube = toCube()
-    private fun toCube(): Cube {
+
+    fun toCube(): Cube {
         var x = col
         var z = row - (col - (col and 1)) / 2
         var y = -x - z
@@ -87,7 +89,7 @@ data class OddQ(val col: Int, val row: Int) {
 }
 
 data class Cube(val x: Int, val y: Int, val z: Int) {
-    //val oddQ = toOddQ()
+
     fun toOddQ(): OddQ {
         var col = x
         var row = z + (x - (x and 1)) / 2
@@ -95,7 +97,7 @@ data class Cube(val x: Int, val y: Int, val z: Int) {
     }
 }
 
-class Hex(val pixF: PixF, val tile: Tile) {
+class Hex(val oddQ: OddQ, val pixF: PixF, val tile: Tile) {
 
     var pixels = ArrayList<PixI>()
 
