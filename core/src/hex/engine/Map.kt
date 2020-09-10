@@ -5,6 +5,10 @@ import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.utils.JsonReader
 import com.badlogic.gdx.utils.JsonValue
+import java.util.*
+import kotlin.collections.ArrayList
+import kotlin.collections.HashMap
+import kotlin.collections.HashSet
 
 object MapReader {
 
@@ -78,6 +82,76 @@ class LevelMap(val tileWidth: Int = 32,
 }
 
 data class OddQ(val col: Int, val row: Int) {
+    companion object {
+        private val directions = arrayOf(
+                arrayOf(PixI(+1, 0), PixI(+1, -1), PixI(0, -1), PixI(-1, -1), PixI(-1, 0), PixI(0, +1)),
+                arrayOf(PixI(+1, +1), PixI(+1, 0), PixI(0, -1), PixI(-1, 0), PixI(-1, +1), PixI(0, +1))
+        )
+    }
+
+    fun neighbor(direction: Int): OddQ {
+        var parity = col and 1
+        var dir = directions[parity][direction]
+        return OddQ(col + dir.x, row + dir.y)
+    }
+
+    fun possibleMovement(terrain: Map<OddQ, Hex>, range: Int): Set<OddQ> {
+        val visited = HashSet<OddQ>()
+        visited.add(this)
+
+        var fringes = ArrayList<ArrayList<OddQ>>() // array of arrays of hexes
+        fringes.add(arrayListOf(this))
+
+        for (k in 1..range) {
+            fringes.add(ArrayList())
+            fringes[k - 1].forEach {
+                for (dir in 0..5) {
+                    var neighbor = it.neighbor(dir)
+                    var hex = terrain[neighbor]
+                    if (hex != null) {
+                        if (!visited.contains(neighbor)) { // and not blocked:
+                            visited.add(neighbor)
+                            fringes[k].add(neighbor)
+                        }
+                    }
+                }
+            }
+        }
+        return visited
+    }
+
+    fun path(terrain: Map<OddQ, Hex>, to: OddQ): List<OddQ> {
+        val frontier: Queue<OddQ> = LinkedList()
+        frontier.add(this)
+        val cameFrom = HashMap<OddQ, OddQ?>()
+        cameFrom[this] = null
+
+        while (!frontier.isEmpty()) {
+            val current = frontier.poll()
+
+            if (current == to) break
+
+            for (dir in 0..5) {
+                var neighbor = current.neighbor(dir)
+                var hex = terrain[neighbor]
+                if (hex != null) { // and is accessible
+                    if (!cameFrom.containsKey(neighbor)) {
+                        frontier.offer(neighbor)
+                        cameFrom[neighbor] = current
+                    }
+                }
+            }
+        }
+
+        // construct path
+        val a = to
+        val path = LinkedList<OddQ>()
+        path.add(a)
+        while (cameFrom[a] != null) {
+            path.addFirst(cameFrom[a])
+        }
+        return path
+    }
 
     fun toCube(): Cube {
         var x = col

@@ -5,7 +5,6 @@ import com.badlogic.gdx.Input.Buttons
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.TextureRegion
-import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.math.Vector3
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Stage
@@ -94,40 +93,21 @@ open class BaseScreen : Screen, InputProcessor {
 
 class WorldScreen(worldMapAsset: String) : BaseScreen() {
 
-    val levelMap: LevelMap
-    val highlight: Highlight
-    val unitHighlight: UnitHighlight
-    val units = ArrayList<Unit>()
+    val controller: Controller
 
-    var lmbPressed: Vector2? = null
-    var rmbPressed: Vector2? = null
+    var lmbPressed: PixI? = null
+    var rmbPressed: PixI? = null
 
     init {
-        levelMap = MapReader.readMap(worldMapAsset)
-        levelMap.terrain.forEach { oddQ, hex -> TileActor(hex.tile.texture, hex.pixF.x, hex.pixF.y, hex.tile.textureWidth.toFloat(), hex.tile.textureHeight.toFloat(), this.mainStage) }
-        highlight = Highlight(mainStage)
-        unitHighlight = UnitHighlight(mainStage)
-        units.add(Unit(this.levelMap, OddQ(1, 1), mainStage))
+        controller = Controller(this, worldMapAsset)
     }
 
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
         if (button == Buttons.LEFT) {
-            lmbPressed = Vector2(screenX.toFloat(), screenY.toFloat())
-            val worldPx = screenToPixI(screenX, screenY)
-            levelMap.worldToHex[worldPx]?.let { hex ->
-                // get unit
-                val unit = units.firstOrNull { it.oddQ == hex.oddQ }
-                if (unit != null) {
-                    unitHighlight.x = levelMap.oddQToPixF[unit.oddQ]!!.x
-                    unitHighlight.y = levelMap.oddQToPixF[unit.oddQ]!!.y
-                    unitHighlight.isVisible = true
-                } else {
-                    unitHighlight.isVisible = false
-                }
-            }
+            lmbPressed = PixI(screenX, screenY)
         }
         if (button == Buttons.RIGHT) {
-            rmbPressed = Vector2(screenX.toFloat(), screenY.toFloat())
+            rmbPressed = PixI(screenX, screenY)
         }
         return super.touchDown(screenX, screenY, pointer, button)
     }
@@ -135,32 +115,28 @@ class WorldScreen(worldMapAsset: String) : BaseScreen() {
     override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
         lmbPressed = null
         rmbPressed = null
+
+        val worldPx = screenToWorld(screenX, screenY)
+        controller.mouseClick(worldPx, button == Buttons.LEFT)
         return super.touchUp(screenX, screenY, pointer, button)
     }
 
     override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean {
-        rmbPressed?.let {
-            val moveVector = Vector2((screenX.toFloat() - it.x) / 4.0f, (screenY.toFloat() - it.y) / 4.0f)
-            rmbPressed = Vector2(screenX.toFloat(), screenY.toFloat())
-
-            mainStage.camera.position.x = mainStage.camera.position.x - moveVector.x
-            mainStage.camera.position.y = mainStage.camera.position.y + moveVector.y
-
-            mainStage.camera.update()
+        if (lmbPressed != null) {
+            val moveVector = PixI((screenX - lmbPressed!!.x), (screenY - lmbPressed!!.y))
+            lmbPressed = PixI(screenX, screenY)
+            controller.mouseDragged(moveVector, true)
+        } else if (rmbPressed != null) {
+            val moveVector = PixI((screenX - rmbPressed!!.x), (screenY - rmbPressed!!.y))
+            rmbPressed = PixI(screenX, screenY)
+            controller.mouseDragged(moveVector, false)
         }
 
         return super.touchDragged(screenX, screenY, pointer)
     }
 
     override fun mouseMoved(screenX: Int, screenY: Int): Boolean {
-        this.highlight.isVisible = false
-        val worldPx = screenToPixI(screenX, screenY)
-        levelMap.worldToHex[worldPx]?.let {
-            highlight.x = it.pixF.x
-            highlight.y = it.pixF.y
-            this.highlight.isVisible = true
-        }
-
+        controller.mouseOver(screenToWorld(screenX, screenY))
         return super.mouseMoved(screenX, screenY)
     }
 
@@ -172,7 +148,7 @@ class WorldScreen(worldMapAsset: String) : BaseScreen() {
         return super.keyDown(keycode)
     }
 
-    fun screenToPixI(screenX: Int, screenY: Int): PixI {
+    private fun screenToWorld(screenX: Int, screenY: Int): PixI {
         val vec = this.mainStage.camera.unproject(Vector3(screenX.toFloat(), screenY.toFloat(), 0f))
         return PixI(vec.x.toInt(), vec.y.toInt())
     }
@@ -203,6 +179,7 @@ class TileActor(texture: TextureRegion, x: Float, y: Float, width: Float, height
 }
 
 class Highlight(s: Stage) : BaseActor(TextureHelper.loadTexture("highlight.png"), s) {
+    var hex: Hex? = null
     init {
         width = 32f
         height = 30f
@@ -211,6 +188,7 @@ class Highlight(s: Stage) : BaseActor(TextureHelper.loadTexture("highlight.png")
 }
 
 class UnitHighlight(s: Stage) : BaseActor(TextureHelper.loadTexture("unit-highlight.png"), s) {
+    var unit: Unit? = null
     init {
         width = 32f
         height = 30f
@@ -231,5 +209,57 @@ class Unit(val map: LevelMap, position: OddQ, s: Stage) : BaseActor(TextureHelpe
         height = 30f
         x = map.oddQToPixF[position]!!.x
         y = map.oddQToPixF[position]!!.y
+    }
+}
+
+class Controller(val baseScreen: BaseScreen, worldMapAsset: String) {
+
+    val levelMap: LevelMap
+    val highlight: Highlight
+    val unitHighlight: UnitHighlight
+    val units = ArrayList<Unit>()
+
+    init {
+        levelMap = MapReader.readMap(worldMapAsset)
+        levelMap.terrain.forEach { (oddQ, hex) -> TileActor(hex.tile.texture, hex.pixF.x, hex.pixF.y, hex.tile.textureWidth.toFloat(), hex.tile.textureHeight.toFloat(), baseScreen.mainStage) }
+        highlight = Highlight(baseScreen.mainStage)
+        unitHighlight = UnitHighlight(baseScreen.mainStage)
+        units.add(Unit(this.levelMap, OddQ(1, 1), baseScreen.mainStage))
+    }
+
+    fun mouseOver(worldPx: PixI) {
+        this.highlight.isVisible = false
+        highlight.hex = null
+        levelMap.worldToHex[worldPx]?.let {
+            highlight.hex = it
+            highlight.x = it.pixF.x
+            highlight.y = it.pixF.y
+            this.highlight.isVisible = true
+        }
+    }
+
+    fun mouseClick(worldPx: PixI, lmb: Boolean) {
+        levelMap.worldToHex[worldPx]?.let { hex ->
+            // get unit
+            val unit = units.firstOrNull { it.oddQ == hex.oddQ }
+            if (unit != null) {
+                unitHighlight.unit = unit
+                unitHighlight.x = levelMap.oddQToPixF[unit.oddQ]!!.x
+                unitHighlight.y = levelMap.oddQToPixF[unit.oddQ]!!.y
+                unitHighlight.isVisible = true
+            } else {
+                unitHighlight.isVisible = false
+                unitHighlight.unit = null
+            }
+        }
+    }
+
+    fun mouseDragged(moveVector: PixI, lmb: Boolean) {
+        if (!lmb) { // rmb
+            baseScreen.mainStage.camera.position.x = baseScreen.mainStage.camera.position.x - moveVector.x
+            baseScreen.mainStage.camera.position.y = baseScreen.mainStage.camera.position.y + moveVector.y
+
+            baseScreen.mainStage.camera.update()
+        }
     }
 }
