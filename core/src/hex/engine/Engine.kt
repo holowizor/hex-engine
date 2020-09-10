@@ -99,7 +99,7 @@ class WorldScreen(worldMapAsset: String) : BaseScreen() {
     var rmbPressed: PixI? = null
 
     init {
-        controller = Controller(this, worldMapAsset)
+        this.controller = Controller(this, worldMapAsset)
     }
 
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
@@ -141,15 +141,13 @@ class WorldScreen(worldMapAsset: String) : BaseScreen() {
     }
 
     override fun keyDown(keycode: Int): Boolean {
-        when (keycode) {
-            Input.Keys.ESCAPE -> Gdx.app.exit()
-        }
+        controller.keyPressed(keycode)
 
         return super.keyDown(keycode)
     }
 
     private fun screenToWorld(screenX: Int, screenY: Int): PixI {
-        val vec = this.mainStage.camera.unproject(Vector3(screenX.toFloat(), screenY.toFloat(), 0f))
+        val vec = mainStage.camera.unproject(Vector3(screenX.toFloat(), screenY.toFloat(), 0f))
         return PixI(vec.x.toInt(), vec.y.toInt())
     }
 }
@@ -180,19 +178,38 @@ class TileActor(texture: TextureRegion, x: Float, y: Float, width: Float, height
 
 class Highlight(s: Stage) : BaseActor(TextureHelper.loadTexture("highlight.png"), s) {
     var hex: Hex? = null
+
     init {
-        width = 32f
-        height = 30f
-        isVisible = false
+        this.width = 32f
+        this.height = 30f
+        this.isVisible = false
+    }
+}
+
+class PathHighlight(s: Stage) : BaseActor(TextureHelper.loadTexture("highlight.png"), s) {
+    var path: List<PixF> = ArrayList()
+
+    init {
+        this.width = 32f
+        this.height = 30f
+    }
+
+    override fun draw(batch: Batch, parentAlpha: Float) {
+        path.forEach {
+            batch.draw(texture,
+                    it.x, it.y, originX, originY,
+                    width, height, scaleX, scaleY, rotation);
+        }
     }
 }
 
 class UnitHighlight(s: Stage) : BaseActor(TextureHelper.loadTexture("unit-highlight.png"), s) {
     var unit: Unit? = null
+
     init {
-        width = 32f
-        height = 30f
-        isVisible = false
+        this.width = 32f
+        this.height = 30f
+        this.isVisible = false
     }
 }
 
@@ -205,10 +222,10 @@ class Unit(val map: LevelMap, position: OddQ, s: Stage) : BaseActor(TextureHelpe
         }
 
     init {
-        width = 32f
-        height = 30f
-        x = map.oddQToPixF[position]!!.x
-        y = map.oddQToPixF[position]!!.y
+        this.width = 32f
+        this.height = 30f
+        this.x = map.oddQToPixF[position]!!.x
+        this.y = map.oddQToPixF[position]!!.y
     }
 }
 
@@ -216,15 +233,23 @@ class Controller(val baseScreen: BaseScreen, worldMapAsset: String) {
 
     val levelMap: LevelMap
     val highlight: Highlight
+    val pathHighlight: PathHighlight
     val unitHighlight: UnitHighlight
     val units = ArrayList<Unit>()
 
     init {
-        levelMap = MapReader.readMap(worldMapAsset)
-        levelMap.terrain.forEach { (oddQ, hex) -> TileActor(hex.tile.texture, hex.pixF.x, hex.pixF.y, hex.tile.textureWidth.toFloat(), hex.tile.textureHeight.toFloat(), baseScreen.mainStage) }
-        highlight = Highlight(baseScreen.mainStage)
-        unitHighlight = UnitHighlight(baseScreen.mainStage)
-        units.add(Unit(this.levelMap, OddQ(1, 1), baseScreen.mainStage))
+        this.levelMap = MapReader.readMap(worldMapAsset)
+        this.levelMap.terrain.forEach { (oddQ, hex) -> TileActor(hex.tile.texture, hex.pixF.x, hex.pixF.y, hex.tile.textureWidth.toFloat(), hex.tile.textureHeight.toFloat(), baseScreen.mainStage) }
+        this.highlight = Highlight(baseScreen.mainStage)
+        this.pathHighlight = PathHighlight(baseScreen.mainStage)
+        this.unitHighlight = UnitHighlight(baseScreen.mainStage)
+        this.units.add(Unit(this.levelMap, OddQ(1, 1), baseScreen.mainStage))
+    }
+
+    fun keyPressed(keycode: Int) {
+        when (keycode) {
+            Input.Keys.ESCAPE -> Gdx.app.exit()
+        }
     }
 
     fun mouseOver(worldPx: PixI) {
@@ -234,22 +259,39 @@ class Controller(val baseScreen: BaseScreen, worldMapAsset: String) {
             highlight.hex = it
             highlight.x = it.pixF.x
             highlight.y = it.pixF.y
-            this.highlight.isVisible = true
+            highlight.isVisible = true
+
+            // show path if unit is selected
+            if (unitHighlight.unit != null) {
+
+                val path = unitHighlight.unit!!.oddQ.path(levelMap.terrain, highlight.hex!!.oddQ)
+                pathHighlight.path = toPixF(path)
+            }
         }
     }
+
+    private fun toPixF(path: List<OddQ>): List<PixF> = path.map { this.levelMap.oddQToPixF[it]!! }
 
     fun mouseClick(worldPx: PixI, lmb: Boolean) {
         levelMap.worldToHex[worldPx]?.let { hex ->
             // get unit
             val unit = units.firstOrNull { it.oddQ == hex.oddQ }
-            if (unit != null) {
+            if (lmb && unit != null && unitHighlight.unit == null) {
                 unitHighlight.unit = unit
                 unitHighlight.x = levelMap.oddQToPixF[unit.oddQ]!!.x
                 unitHighlight.y = levelMap.oddQToPixF[unit.oddQ]!!.y
                 unitHighlight.isVisible = true
+            } else if (lmb && unitHighlight.unit != null) {
+                // move unit
+                unitHighlight.unit!!.oddQ = hex.oddQ
+
+                unitHighlight.isVisible = false
+                unitHighlight.unit = null
+                pathHighlight.path = emptyList()
             } else {
                 unitHighlight.isVisible = false
                 unitHighlight.unit = null
+                pathHighlight.path = emptyList()
             }
         }
     }

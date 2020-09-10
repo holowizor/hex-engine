@@ -121,22 +121,24 @@ data class OddQ(val col: Int, val row: Int) {
     }
 
     fun path(terrain: Map<OddQ, Hex>, to: OddQ): List<OddQ> {
-        val frontier: Queue<OddQ> = LinkedList()
-        frontier.add(this)
+        val frontier: PriorityQueue<Pair<Int, OddQ>> = PriorityQueue(kotlin.Comparator { o1, o2 -> o1.first.compareTo(o2.first) })
+        frontier.add(Pair(0, this))
         val cameFrom = HashMap<OddQ, OddQ?>()
         cameFrom[this] = null
+        val costSoFar = HashMap<OddQ, Int>()
+        costSoFar[this] = 0
 
         while (!frontier.isEmpty()) {
-            val current = frontier.poll()
-
+            val current = frontier.poll().second
             if (current == to) break
-
             for (dir in 0..5) {
                 var neighbor = current.neighbor(dir)
                 var hex = terrain[neighbor]
                 if (hex != null) { // and is accessible
-                    if (!cameFrom.containsKey(neighbor)) {
-                        frontier.offer(neighbor)
+                    val newCost = costSoFar[current]!! + hex.cost
+                    if (!costSoFar.containsKey(neighbor) || newCost < costSoFar[neighbor]!!) {
+                        costSoFar[neighbor] = newCost
+                        frontier.offer(Pair(newCost + heuristic(to, neighbor), neighbor))
                         cameFrom[neighbor] = current
                     }
                 }
@@ -144,13 +146,18 @@ data class OddQ(val col: Int, val row: Int) {
         }
 
         // construct path
-        val a = to
+        var a: OddQ? = to
         val path = LinkedList<OddQ>()
-        path.add(a)
+        path.add(a!!)
         while (cameFrom[a] != null) {
             path.addFirst(cameFrom[a])
+            a = cameFrom[a]
         }
         return path
+    }
+
+    fun heuristic(a: OddQ, b: OddQ): Int {
+        return Math.abs(a.col - b.col) + Math.abs(a.row - b.row)
     }
 
     fun toCube(): Cube {
@@ -174,6 +181,7 @@ data class Cube(val x: Int, val y: Int, val z: Int) {
 class Hex(val oddQ: OddQ, val pixF: PixF, val tile: Tile) {
 
     var pixels = ArrayList<PixI>()
+    val cost: Int = 1
 
     fun myPixels(topEdgeLen: Int, width: Int, height: Int): List<PixI> {
         val hexPixels = ArrayList<PixI>()
